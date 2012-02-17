@@ -24,8 +24,12 @@ namespace HeavyDuck.Dnd.PartyReport
         {
             using (var dialog = new OpenFileDialog())
             {
+                dialog.Multiselect = true;
                 if (DialogResult.OK == dialog.ShowDialog(this))
-                    listBox1.Items.Add(dialog.FileName);
+                {
+                    foreach (var path in dialog.FileNames)
+                        listBox1.Items.Add(path);
+                }
             }
         }
 
@@ -52,7 +56,7 @@ namespace HeavyDuck.Dnd.PartyReport
                         inventory.Add(new MagicItem
                         {
                             Name = iter.Current.SelectSingleNode("@name").Value.Trim(),
-                            Url = iter.Current.SelectSingleNode("@url").Value.Trim(),
+                            Url = iter.Current.SelectSingleNode("@url").Value.Trim(), // URLs in the XML are wrong
                             Level = iter.Current.SelectSingleNode("specific[@name = 'Level']").ValueAsInt,
                             MagicItemType = iter.Current.SelectSingleNode("specific[@name = 'Magic Item Type']").Value.Trim(),
                         });
@@ -67,12 +71,27 @@ namespace HeavyDuck.Dnd.PartyReport
                 using (var writer = XmlWriter.Create(fs))
                 {
                     writer.WriteStartElement("html");
+
+                    writer.WriteStartElement("head");
+                    writer.WriteElementString("title", "West Chester D&D — Party Report");
+
+                    writer.WriteStartElement("style");
+                    writer.WriteAttributeString("type", "text/css");
+                    writer.WriteValue(@"
+body { font: 10pt Verdana; padding: 0; margin: 0; } 
+div.character { float: left; margin: 1em; }
+h1 { font-size: 1.2em; font-weight: bold; }
+h2 { font-size: 1em; font-weight: bold; }");
+                    writer.WriteEndElement(); // style
+
+                    writer.WriteEndElement(); // head
+
                     writer.WriteStartElement("body");
 
-                    foreach (var character in items)
+                    foreach (var character in items.OrderBy(c => c.Key))
                     {
                         writer.WriteStartElement("div");
-                        writer.WriteAttributeString("style", "float: left;");
+                        writer.WriteAttributeString("class", "character");
 
                         writer.WriteElementString("h1", character.Key);
 
@@ -81,28 +100,22 @@ namespace HeavyDuck.Dnd.PartyReport
 
                         writer.WriteElementString("h2", "Weapons");
                         writer.WriteStartElement("ul");
-                        foreach (var item in item_lookup["Weapon"].OrderBy(i => i.Name))
+                        foreach (var item in item_lookup["Weapon"].OrderByDescending(i => i.Level))
                         {
                             writer.WriteStartElement("li");
-                            writer.WriteStartElement("a");
-                            writer.WriteAttributeString("href", item.Url);
                             writer.WriteValue(string.Format("L{0:00} {1}", item.Level, item.Name));
-                            writer.WriteEndElement(); // a
                             writer.WriteEndElement(); // li
 
                             items_remaining.Remove(item);
                         }
                         writer.WriteEndElement(); // ul
 
-                        writer.WriteElementString("h2", "Armor");
+                        writer.WriteElementString("h2", "Armor / Neck");
                         writer.WriteStartElement("ul");
-                        foreach (var item in item_lookup["Armor"].Concat(item_lookup["Neck Slot Item"]).OrderBy(i => Tuple.Create(i.MagicItemType, i.Name)))
+                        foreach (var item in item_lookup["Armor"].Concat(item_lookup["Neck Slot Item"]).OrderByDescending(i => i.Level).OrderBy(i => i.MagicItemType))
                         {
                             writer.WriteStartElement("li");
-                            writer.WriteStartElement("a");
-                            writer.WriteAttributeString("href", item.Url);
                             writer.WriteValue(string.Format("L{0:00} {1}", item.Level, item.Name));
-                            writer.WriteEndElement(); // a
                             writer.WriteEndElement(); // li
 
                             items_remaining.Remove(item);
@@ -111,13 +124,10 @@ namespace HeavyDuck.Dnd.PartyReport
 
                         writer.WriteElementString("h2", "Other");
                         writer.WriteStartElement("ul");
-                        foreach (var item in items_remaining.OrderByDescending(i => i.Level))
+                        foreach (var item in items_remaining.OrderBy(i => i.Name).OrderByDescending(i => i.Level))
                         {
                             writer.WriteStartElement("li");
-                            writer.WriteStartElement("a");
-                            writer.WriteAttributeString("href", item.Url);
                             writer.WriteValue(string.Format("L{0:00} {1}", item.Level, item.Name));
-                            writer.WriteEndElement(); // a
                             writer.WriteEndElement(); // li
                         }
                         writer.WriteEndElement(); // ul
